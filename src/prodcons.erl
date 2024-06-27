@@ -1,10 +1,10 @@
 -module(prodcons).
--export([start/0, producer/2, consumer/1, consume/2, loop/3]).
+-export([start/0, producer/1, consumer/1, consume/2]).
 start() ->
     %% Iniciar produtores e registrá-los
-    P1 = spawn(fun() -> producer(1, 3.5) end),
+    P1 = spawn(fun() -> producer(1) end),
     register(producer1, P1),
-    P2 = spawn(fun() -> producer(2, 7.5) end),
+    P2 = spawn(fun() -> producer(2) end),
     register(producer2, P2),
     %% Iniciar consumidores
     spawn(fun() -> consumer(1) end),
@@ -14,23 +14,35 @@ start() ->
     %% Monitorar produtores
     erlang:monitor(process, P1),
     erlang:monitor(process, P2).
-producer(Id, Time) ->
-    loop(Id, Time, []).
-loop(Id, Time, Queue) ->
+producer(Id) ->
+    loop(Id, []).
+loop(Id, Queue) ->
+    %% Se a fila estiver vazia, começar a produção de um novo produto
+    case Queue of
+        [] ->
+            ProductType = rand:uniform(2),
+            ProductionTime = case ProductType of
+                1 -> 3.5;  %% Tempo de produção para o tipo de produto 1
+                2 -> 7.5  %% Tempo de produção para o tipo de produto 2
+            end,
+            NewProduct = {Id, ProductType},  %% Produzir aleatoriamente tipo 1 ou 2
+            io:format("Produtor ~p: INICIANDO PRODUÇÃO PRODUTO ~p~n", [Id, ProductType]),
+            timer:sleep(trunc(ProductionTime * 1000)),  %% Simular tempo de produção
+            io:format("Produtor ~p: PRODUTO FINALIZADO ~p~n", [Id, ProductType]),
+            loop(Id, Queue ++ [NewProduct]);
+        _ ->
+            loop_after_production(Id, Queue)
+    end.
+loop_after_production(Id, Queue) ->
     receive
         done ->
-            io:format("Produtor ~p: Terminei de produzir~n", [Id]),
-            timer:sleep(trunc(Time * 1000)),  %% Converter para milissegundos
-            loop(Id, Time, Queue);
+            io:format("Produtor ~p: PRODUTOR CANSADO~n", [Id]),
+            loop(Id, Queue);
 
         {consume, ConsumerPid} when length(Queue) > 0 ->
             [Product | Rest] = Queue,
             ConsumerPid ! {produce, Product},
-            loop(Id, Time, Rest)
-    after trunc(Time * 1000) ->
-            Product = {Id, rand:uniform(2)},  %% Produzir aleatoriamente tipo 1 ou 2
-            io:format("Produtor ~p: Produzindo ~p~n", [Id, Product]),
-            loop(Id, Time, Queue ++ [Product])
+            loop(Id, Rest)
     end.
 consumer(Id) ->
     loop_consume(Id).
